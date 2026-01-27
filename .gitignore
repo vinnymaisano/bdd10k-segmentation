@@ -1,0 +1,10 @@
+/data/
+/logs/
+/preds/
+/eval/
+/old/
+/checkpoints/
+*.pth
+.DS_store
+__pycache__/
+.ipynb_checkpoints/
