@@ -1,3 +1,4 @@
 # bdd10k-segmentation
 
-<img width="1800" height="4000" alt="predictions" src="https://github.com/user-attachments/assets/58f4dfe5-9627-4c09-a4f5-a57e25a171e6" />
+## Example predictions:
+<img width="1800" height="2500" alt="predictions2" src="https://github.com/user-attachments/assets/4f275be4-1443-4e09-9e17-2501bc202749" />
