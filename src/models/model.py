@@ -1,33 +1,27 @@
 import segmentation_models_pytorch as smp
 import torch.nn as nn
 
-def get_model(num_classes=19, backbone="resnet50", use_gn=False):
+def convert_bn_to_gn(module, num_groups=32):
+    """
+    Recursively replaces BatchNorm2d with GroupNorm.
+    """
+    for name, child in module.named_children():
+        if isinstance(child, nn.BatchNorm2d):
+            # replace with GroupNorm - use child.num_features to match the existing channel count
+            num_channels = child.num_features
+            groups = num_groups if num_channels % num_groups == 0 else num_channels # check for divisibility - specifically for decoder and segmentation head
+
+            setattr(module, name, nn.GroupNorm(groups, child.num_features))
+        else:
+            convert_bn_to_gn(child, num_groups)
+
+def get_model(num_classes=19, backbone="resnet50"):
     model = smp.Unet(
         encoder_name=backbone,
         encoder_weights="imagenet",
         in_channels=3,
         classes=num_classes,
     )
-    
-    # convert batch norm layers to group norm
-    if use_gn:
-        for name, module in model.named_modules():
-            if isinstance(module, nn.BatchNorm2d):
-                # Split the path to the layer
-                parts = name.split(".")
-                parent_name = ".".join(parts[:-1])
-                layer_name = parts[-1]
-                
-                # Access the parent module
-                parent = dict(model.named_modules())[parent_name]
-                
-                # Determine number of groups (must divide num_channels)
-                num_channels = module.num_features
-                # 32 is standard, but some early layers might have fewer channels
-                groups = 32 if num_channels % 32 == 0 else 16
-                if num_channels < groups: groups = num_channels
-                
-                # Replace BN with GN
-                setattr(parent, layer_name, nn.GroupNorm(groups, num_channels))
-                
+
+    convert_bn_to_gn(model, num_groups=32)
     return model
