@@ -67,7 +67,8 @@ def train(cfg):
 
     # get most recent training run
     checkpoint_loaded = False
-    existing_runs = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))])
+    # existing_runs = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))])
+    existing_runs = []
 
     if len(existing_runs) > 0:
         latest_train_run = os.path.join(output_dir, existing_runs[-1])
@@ -149,8 +150,7 @@ def train(cfg):
             
             # update progress bar every 10 batches
             if i % 10 == 0:
-                print("Learning rate:", current_lr)
-                train_pbar.set_postfix({"loss": f"{raw_loss.item():.4f}", "lr": f"{current_lr:.1e}"})
+                train_pbar.set_postfix({"loss": f"{raw_loss.item():.4f}", "lr": f"{current_lr:.2e}"})
 
             iter += 1
 
