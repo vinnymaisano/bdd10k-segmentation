@@ -18,13 +18,16 @@ def get_config():
     for split in ["train", "val"]:
         cfg["data"][split]["img"] = os.path.join(root, cfg["data"][split]["img"])
         cfg["data"][split]["label"] = os.path.join(root, cfg["data"][split]["label"]) 
+        cfg["data"][split]["color_label"] = os.path.join(root, cfg["data"][split]["color_label"]) 
         
         # validation
         img_path = cfg["data"][split]["img"]
         label_path = cfg["data"][split]["label"]
+        color_label_path = cfg["data"][split]["color_label"]
         
         assert os.path.isdir(img_path), f"Image directory missing: {img_path}"
         assert os.path.isdir(label_path), f"Label directory missing: {label_path}"
+        assert os.path.isdir(color_label_path), f"Label directory missing: {color_label_path}"
 
     # create checkpoint directory on kaggle
     if env == "kaggle":
