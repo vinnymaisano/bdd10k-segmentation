@@ -15,15 +15,12 @@ from src.utils.config import get_config
 import os
 import yaml
 
-# config
-ROOT_DIR = "data/processed"
-BATCH_SIZE = 8
-EPOCHS = 10
 
 # def train(train_img_dir, train_label_dir, val_img_dir, val_label_dir, checkpoint_dir, output_dir, batch_size=8, epochs=10):
 def train(cfg):
     # use gpu
     DEVICE = get_device()
+    epochs = cfg["training"]["epochs"]
 
     now = datetime.now()
     format = "%m-%d-%Y-%H%M"
@@ -116,12 +113,12 @@ def train(cfg):
     early_stop_counter = 0
 
     accumulation_steps = batch_size // true_batch_size
-    for epoch in range(start_epoch, start_epoch + EPOCHS):
+    for epoch in range(start_epoch, start_epoch + epochs):
         # training
         model.train() # set model to training mode
         train_loss = 0
    
-        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Train]")
+        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]")
         
         iter = 0
         for i, (images, masks, _) in enumerate(train_pbar):
