@@ -58,7 +58,6 @@ def train(cfg):
 
     # load optimizer
     current_lr = cfg["training"]["lr"]
-    print("current_lr 1st:", current_lr)
     optimizer = get_optimizer(model, lr=current_lr, weight_decay=cfg["training"]["weight_decay"])
 
     # drop learning rate by 10x if validation loss doesn't improve for 3 epochs
@@ -150,6 +149,7 @@ def train(cfg):
             
             # update progress bar every 10 batches
             if i % 10 == 0:
+                print("Learning rate:", current_lr)
                 train_pbar.set_postfix({"loss": f"{raw_loss.item():.4f}", "lr": f"{current_lr:.1e}"})
 
             iter += 1
