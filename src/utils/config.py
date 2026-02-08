@@ -10,20 +10,25 @@ def get_config():
     with open(filename, "r") as f:
         cfg = yaml.safe_load(f)
 
-    # resolve paths based on the environment
+    # resolve environment
     env = "kaggle" if is_kaggle() else "local"
     root = cfg["data"]["roots"][env]
-
-    if env == "kaggle":
-        for split in ["train", "val"]:
-            cfg["data"][split]["img"] = os.path.join(root, cfg["data"][split]["img"])
-            cfg["data"][split]["label"] = os.path.join(root, cfg["data"][split]["label"])
-
-        cfg["training"]["checkpoint_dir"] = "/kaggle/working/checkpoints" # directory will be created by train.py if doesnt' exist
-
+    
+    # resolve data paths
     for split in ["train", "val"]:
-        assert os.path.isdir(cfg["data"][split]["img"]), f"{cfg['data'][split]['img']} does not exist"
-        assert os.path.isdir(cfg["data"][split]["label"]), f"{cfg['data'][split]['label']} does not exist"
+        cfg["data"][split]["img"] = os.path.join(root, cfg["data"][split]["img"])
+        cfg["data"][split]["label"] = os.path.join(root, cfg["data"][split]["label"]) 
+        
+        # validation
+        img_path = cfg["data"][split]["img"]
+        label_path = cfg["data"][split]["label"]
+        
+        assert os.path.isdir(img_path), f"Image directory missing: {img_path}"
+        assert os.path.isdir(label_path), f"Label directory missing: {label_path}"
 
-    print(f"Using {env.upper()} data root: {root}")
+    # create checkpoint directory on kaggle
+    if env == "kaggle":
+        cfg["training"]["checkpoint_dir"] = "/kaggle/working/checkpoints"
+
+    print(f"Using {env.upper()} environment. Data root: {root}")
     return cfg
