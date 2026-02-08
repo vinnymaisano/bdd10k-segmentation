@@ -35,6 +35,9 @@ def train(cfg):
     start_epoch = 0
     best_val_loss = float("inf")
 
+    batch_size = cfg["training"]["batch_size"]
+    true_batch_size = cfg["training"]["true_batch_size"]
+
     # mIoU metric to display during training
     train_miou_metric = MulticlassJaccardIndex(num_classes=cfg["project"]["num_classes"], ignore_index=cfg["project"]["ignore_index"]).to(DEVICE)
     val_miou_metric = MulticlassJaccardIndex(num_classes=cfg["project"]["num_classes"], ignore_index=cfg["project"]["ignore_index"]).to(DEVICE)
@@ -43,8 +46,8 @@ def train(cfg):
     train_ds = BDD_Dataset(cfg["data"]["train"]["img"], cfg["data"]["train"]["label"], transform=get_train_transforms(cfg))
     val_ds = BDD_Dataset(cfg["data"]["val"]["img"], cfg["data"]["val"]["label"], transform=get_val_transforms(cfg))
 
-    train_loader = DataLoader(train_ds, batch_size=cfg["training"]["true_batch_size"], shuffle=True, num_workers=1)
-    val_loader = DataLoader(val_ds, batch_size=cfg["training"]["true_batch_size"], shuffle=False, num_workers=1)
+    train_loader = DataLoader(train_ds, batch_size=true_batch_size, shuffle=True, num_workers=1)
+    val_loader = DataLoader(val_ds, batch_size=true_batch_size, shuffle=False, num_workers=1)
 
     # setup model
     model = get_model(num_classes=cfg["project"]["num_classes"]).to(DEVICE)
@@ -102,6 +105,7 @@ def train(cfg):
     early_stop_patience = cfg["training"]["patience"] # use config
     early_stop_counter = 0
 
+    accumulation_steps = batch_size // true_batch_size
     for epoch in range(start_epoch, start_epoch + EPOCHS):
         # training
         model.train() # set model to training mode
@@ -110,31 +114,38 @@ def train(cfg):
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{EPOCHS} [Train]")
         
         iter = 0
-        for images, masks, _ in train_pbar:
+        for i, (images, masks, _) in enumerate(train_pbar):
             images, masks = images.to(DEVICE), masks.to(DEVICE)
             
             # forward pass
             outputs = model(images)
-            loss = criterion(outputs, masks)
+            raw_loss = criterion(outputs, masks)
+            loss = raw_loss / accumulation_steps
             
             # calculate mIoU
             preds = torch.argmax(outputs, dim=1)
             train_miou_metric.update(preds, masks)
 
             # backward pass
-            optimizer.zero_grad()
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
-            optimizer.step()
+            
+            # gradient accumulation
+            if (i + 1) % accumulation_steps == 0 or (i + 1) == len(train_loader):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+                optimizer.step()
+                optimizer.zero_grad()
             
             # update loss
-            train_loss += loss.item()
-            train_pbar.set_postfix({"loss": loss.item(), "lr": f"{current_lr:.1e}"})
+            train_loss += raw_loss
+            
+            # update progress bar every 10 batches
+            if i % 10 == 0:
+                train_pbar.set_postfix({"loss": f"{raw_loss.item():.4f}", "lr": f"{current_lr:.1e}"})
 
             iter += 1
 
         # validation
-        avg_train_loss = train_loss / len(train_loader)
+        avg_train_loss = (train_loss / len(train_loader)).item()
         final_train_miou = train_miou_metric.compute().item()
         avg_val_loss, final_val_miou = validate(model, val_loader, criterion, DEVICE, val_miou_metric, epoch)
 
@@ -164,7 +175,7 @@ def train(cfg):
                 'best_val_loss': best_val_loss,
                 'epoch': epoch
             }
-            torch.save(checkpoint, os.path.join(new_train_run_dir, "best_model.pth"))
+            torch.save(checkpoint, os.path.join(new_checkpoint_dir, "best_model.pth"))
 
             print(f"--> New best model saved: (val loss: {best_val_loss:.4f} | val mIoU: {final_val_miou})")
         else:
@@ -194,6 +205,8 @@ def train(cfg):
         if early_stop_counter >= early_stop_patience:
             print(f"Early stopping triggered at epoch {epoch+1}. Training halted.")
             break
+    
+    # save a copy of config.yaml
 
 # plot loss and mIoU
 def plot_history(df, checkpoint_dir):
