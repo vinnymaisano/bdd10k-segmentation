@@ -11,8 +11,9 @@ import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
-from src.utils.config import get_config, is_kaggle
+from src.utils.config import get_config
 import os
+import yaml
 
 # config
 ROOT_DIR = "data/processed"
@@ -65,29 +66,37 @@ def train(cfg):
     )
 
     # get most recent training run
-    latest_train_run = f"{output_dir}/{sorted(os.listdir(output_dir))[-1]}"
-    latest_checkpoint = os.path.join(latest_train_run, "best_model.pth")
-    
-    # load the checkpoint if it exists
     checkpoint_loaded = False
-    if os.path.exists(latest_checkpoint):
-        checkpoint_loaded = True
-        print(f"Loading existing checkpoint {latest_checkpoint}...")
-        checkpoint = torch.load(latest_checkpoint, map_location=DEVICE)
-        model.load_state_dict(checkpoint['model_state_dict'])
+    existing_runs = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))])
 
-        if "optimizer_state_dict" in checkpoint:
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            current_lr = optimizer.param_groups[0]['lr']
-            print(f"Loaded optimizer state: learning rate={current_lr}")
+    if len(existing_runs) > 0:
+        latest_train_run = os.path.join(output_dir, existing_runs[-1])
+        latest_checkpoint = os.path.join(latest_train_run, "best_model.pth")
+    
+        # load the checkpoint if it exists
+        if os.path.exists(latest_checkpoint):
+            checkpoint_loaded = True
+            print(f"Loading existing checkpoint {latest_checkpoint}...")
+            checkpoint = torch.load(latest_checkpoint, map_location=DEVICE)
+            model.load_state_dict(checkpoint['model_state_dict'])
 
-        # start at epoch where left off
-        start_epoch = checkpoint.get("epoch", 0)
+            if "optimizer_state_dict" in checkpoint:
+                optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+                current_lr = optimizer.param_groups[0]['lr']
+                print(f"Loaded optimizer state: learning rate={current_lr}")
 
-        # for saving checkpoints
-        print("Validating model checkpoint...")
-        best_val_loss, _ = validate(model, val_loader, criterion, DEVICE, val_miou_metric)
-        print(f"Baseline val loss: {best_val_loss:.4f}")    
+            if "scheduler_state_dict" in checkpoint:
+                scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+                print("Loaded scheduler state.")
+
+            # start at epoch where left off
+            start_epoch = checkpoint.get("epoch", 0) + 1
+
+            # recrod best val loss for saving checkpoints
+            best_val_loss = checkpoint.get("best_val_loss", float("inf"))
+            print(f"Baseline val loss: {best_val_loss:.4f}")   
+        else:
+            print("No previous checkpoint found.") 
     
     # store results from this training run
     new_checkpoint_dir = os.path.join(output_dir, f"train_run_{now_str}") # format: train_run_01-01-2026-0000
@@ -172,6 +181,7 @@ def train(cfg):
             checkpoint = {
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optimizer.state_dict(),
+                'scheduler_state_dict': scheduler.state_dict(),
                 'best_val_loss': best_val_loss,
                 'epoch': epoch
             }
@@ -205,8 +215,13 @@ def train(cfg):
         if early_stop_counter >= early_stop_patience:
             print(f"Early stopping triggered at epoch {epoch+1}. Training halted.")
             break
-    
-    # save a copy of config.yaml
+
+    # save a copy of the config used for this training run
+    config_save_path = os.path.join(new_checkpoint_dir, "config.yaml")
+    with open(config_save_path, 'w') as f:
+        yaml.dump(cfg, f, default_flow_style=False)
+
+    print(f"Configuration saved to {config_save_path}")
 
 # plot loss and mIoU
 def plot_history(df, checkpoint_dir):
