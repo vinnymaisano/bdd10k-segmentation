@@ -30,14 +30,11 @@ bdd_weights = torch.tensor([
 def get_criterion():
     """
     Standard Cross Entropy for multi-class segmentation.
-    ignore_index=255 ensures the 'void' pixels don't ruin the training.
+    ignore_index=255 ensures "void" pixels won't ruin the training.
     """
     return nn.CrossEntropyLoss(weight=bdd_weights.to(device), ignore_index=255)
 
 def get_optimizer(model, lr=1e-4, weight_decay=1e-5):
-    """
-    Use Adam optimizer
-    """
     return torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
 
 def get_class_weights():

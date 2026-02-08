@@ -1,4 +1,6 @@
 import os
+import argparse
+from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -9,45 +11,64 @@ import json
 from torchmetrics.classification import MulticlassJaccardIndex, MulticlassAccuracy
 from torchmetrics.classification import MulticlassConfusionMatrix
 from src.models.model import get_model 
-from src.data.dataset import BDDDataset
+from src.data.dataset import BDD_Dataset
 from src.data.transforms import get_val_transforms
 from src.engine.criterion import get_criterion
 from src.engine.device import get_device
 from datetime import datetime
+from src.utils.config import get_config
 
-def evaluate():
+def evaluate(checkpoint_dir, img_dir, mask_dir, output_dir, save_preds):
     device = get_device()
     print(f"Using device: {device}")
 
+    # timestamp to uniquely identify this evaluation
     now = datetime.now()
     format = "%m-%d-%Y-%H%M"
     now_str = now.strftime(format)
 
-    # latest model checkpoint
-    latest_train_run = sorted(os.listdir("checkpoints"))[-1]
-    checkpoint_path = os.path.join("checkpoints", latest_train_run, "best_model.pth")
-
-    # dataset to evaluate model on
-    split = "val"
+    # if no checkpoint directory provided, default to the latest one in checkpoints folder
+    if checkpoint_dir is None:
+        if len(os.listdir("checkpoints")) == 0:
+            raise FileNotFoundError(
+                f"No checkpoint_dir provided, so defaulted to /checkpoints folder but folder is empty.",
+                "Please provide a path via --checkpoint_dir or ensure /checkpoints folder isn't empty"
+            )
+        latest_train_run = sorted(os.listdir("checkpoints"))[-1]
+        checkpoint_dir = os.path.join("checkpoints", latest_train_run, "best_model.pth")
 
     # load model
     model = get_model(num_classes=19).to(device)
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device)["model_state_dict"])
+    model.load_state_dict(torch.load(checkpoint_dir, map_location=device)["model_state_dict"])
     model.eval()
 
     # load data
     batch_size = 4
-    transform = get_val_transforms()
+    cfg = get_config
+    transform = get_val_transforms(cfg)
     
-    val_ds = BDDDataset('data/processed', split=split, transform=transform)
+    val_ds = BDD_Dataset(img_dir, mask_dir, transform)
     val_loader = DataLoader(val_ds, batch_size=batch_size)
+    
+    # get dataset from image path
+    split = ""
+    if "val" in str(img_dir):
+        split = "val_"
+    elif "train" in str(img_dir):
+        split = "train_"
+    elif "test" in str(img_dir):
+        split = "test_"
+    print(f"Dataset split: {split}")
 
-
-    # directories for outputting metrics and masks
-    output_dir = f'eval/{split}_evaluation_results_{now_str}' # save metrics
-    mask_dir = f'preds/{split}_masks_{now_str}' # save predictions
+    # folder for outputs
+    output_dir = os.path.join(output_dir, f"{split}evaluation_results_{now_str}")
     os.makedirs(output_dir, exist_ok=True)
-    os.makedirs(mask_dir, exist_ok=True)
+    print("output folder:", output_dir) 
+
+    # folder for predicted masks
+    preds_dir = os.path.join(output_dir, "preds")
+    if save_preds:
+        os.makedirs(preds_dir, exist_ok=True)
 
     classes = ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light',
             'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car',
@@ -60,7 +81,6 @@ def evaluate():
 
     # criterion
     criterion = get_criterion()
-
     total_loss = 0.0
 
     # run evaluation and save predictions
@@ -79,12 +99,13 @@ def evaluate():
             iou_metric.update(preds, masks)
             acc_metric.update(preds, masks)
             conf_matrix_metric.update(preds, masks)
-
-            preds_np = preds.cpu().numpy().astype(np.uint8)
-            # save each prediction
-            for j in range(preds_np.shape[0]):
-                save_path = os.path.join(mask_dir, filenames[j].replace(".jpg", ".png"))
-                cv2.imwrite(save_path, preds_np[j])
+            
+            if save_preds:
+                preds_np = preds.cpu().numpy().astype(np.uint8)
+                # save each prediction
+                for j in range(preds_np.shape[0]):
+                    save_path = os.path.join(preds_dir, filenames[j].replace(".jpg", ".png"))
+                    cv2.imwrite(save_path, preds_np[j])
             
     print(f"Saved {len(os.listdir(mask_dir))} raw masks to {mask_dir}")
 
@@ -121,4 +142,42 @@ def evaluate():
     print(f"\nOVERALL mIoU: {per_class_iou.mean().item():.4f}")
 
 if __name__ == "__main__":
-    evaluate()
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--checkpoint_dir", 
+        type=str, 
+        required=False, 
+        help="Path to the model checkpoint that will be used to make predicitons. Default is latest checkpoint"
+    )
+    parser.add_argument(
+        "--img_dir", 
+        type=str, 
+        required=True, 
+        help="Path to the directory containing input images"
+    )
+    parser.add_argument(
+        "--mask_dir", 
+        type=str, 
+        required=True, 
+        help="Path to the directory containing ground truth masks"
+    )
+    parser.add_argument(
+        "--output_dir", 
+        type=str, 
+        required=True, 
+        help="Path to directory that metrics and predictions will be saved to"
+    )
+    parser.add_argument(
+        "--save_preds",
+        action="store_true",
+        help="Save the output masks"
+    )
+    args = parser.parse_args()
+
+    checkpoint_dir = None
+    if args.checkpoint_dir is not None:
+        checkpoint_dir = args.checkpoint_dir
+
+    print(args)
+
+    evaluate(checkpoint_dir=checkpoint_dir, img_dir=Path(args.img_dir), mask_dir=Path(args.mask_dir), output_dir=Path(args.output_dir), save_preds=args.save_preds)

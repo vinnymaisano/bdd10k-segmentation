@@ -1,0 +1,20 @@
+class_name,iou
+road,0.9376297
+sidewalk,0.60847646
+building,0.83942455
+wall,0.34041512
+fence,0.47692195
+pole,0.4364963
+traffic light,0.45331174
+traffic sign,0.4542703
+vegetation,0.85373074
+terrain,0.46612215
+sky,0.94843936
+person,0.5634029
+rider,0.0
+car,0.8856199
+truck,0.54363436
+bus,0.7363282
+train,0.0
+motorcycle,0.0
+bicycle,0.0

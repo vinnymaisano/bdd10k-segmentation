@@ -27,7 +27,8 @@ def predict(model, image_path, device, color_map=COLOR_MAP):
     h_orig, w_orig = image_rgb.shape[:2] # 720, 1280
     
     # resize to 256, 512 and normalize
-    transform = get_val_transforms()
+    cfg = get_config()
+    transform = get_val_transforms(cfg)
     input_tensor = transform(image=image_rgb)['image'].unsqueeze(0).to(device)
 
     # inference

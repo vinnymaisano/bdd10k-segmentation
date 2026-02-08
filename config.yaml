@@ -1,0 +1,70 @@
+# global
+project:
+  name: "BDD100K-Segmentation"
+  num_classes: 19
+  ignore_index: 255
+  classes: ['road', 'sidewalk', 'building', 'wall', 'fence', 'pole', 'traffic light',
+            'traffic sign', 'vegetation', 'terrain', 'sky', 'person', 'rider', 'car',
+            'truck', 'bus', 'train', 'motorcycle', 'bicycle']
+
+# data paths
+data:
+  roots:
+    local: "data/processed"
+    kaggle: "/kaggle/input/solesensei_bdd100k/bdd100k_seg/bdd100k/seg"
+  
+  train:
+    img: "images/train"
+    label: "labels/train"
+    color_label: "color_labels/train"
+  val:
+    img: "images/val"
+    label: "labels/val"
+    color_label: "color_labels/val"
+
+# hyperparameters
+training:
+  epochs: 50
+  batch_size: 32 # effective batch size after gradient accumulation
+  true_batch_size: 4 # batch size that can fit in memory
+  lr: 0.0001
+  weight_decay: 0.00001
+  patience: 7
+  checkpoint_dir: "checkpoints"
+  scheduler_patience: 3
+  scheduler_factor: 0.1
+
+# evaluation
+evaluation:
+  batch_size: 4
+  save_preds: true
+  output_dir: "evaluations"
+
+# data transforms/augmentation
+transforms:
+  resize_h: 512
+  resize_w: 1024
+  mean: [0.485, 0.456, 0.406]
+  std: [0.229, 0.224, 0.225]
+  # augmentations - used during training only
+  augmentations:
+
+    # spatial
+    crop_scale: [0.5, 1.0]
+    horizontal_flip_prob: 0.5
+    affine_rotate_deg: 10
+    affine_translate_pct: 0.0625
+    affine_scale_range: [0.8, 1.2]
+    affine_prob: 0.5
+    
+    # lighting/weather
+    weather_prob: 0.4
+    shadow_prob: 0.3
+    brightness: 0.2
+    contrast: 0.2
+    saturation: 0.2
+    hue: 0.1
+    clahe_limit: 2.0
+    
+    # noise
+    noise_prob: 0.2

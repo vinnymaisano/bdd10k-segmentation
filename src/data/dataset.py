@@ -4,20 +4,22 @@ import torch
 from torch.utils.data import Dataset
 from pathlib import Path
 
-class BDDDataset(Dataset):
-    def __init__(self, root_dir, split="train", transform=None):
+class BDD_Dataset(Dataset):
+    def __init__(self, img_dir, mask_dir, transform=None):
         """
             root_dir (str/Path): Path to 'data/processed'
             split (str): 'train' or 'val'
             transform: Albumentations transformation pipeline
         """
-        self.root_dir = Path(root_dir)
-        self.img_dir = self.root_dir / "images" / split
-        self.mask_dir = self.root_dir / "labels" / split
+        print(f"img_dir:{img_dir} mask_dir:{mask_dir}")
+        self.img_dir = Path(img_dir)
+        self.mask_dir = Path(mask_dir)
         self.transform = transform
         
         # create list of all .jpg files in the image directory
         if not self.img_dir.exists():
+            raise RuntimeError(f"Directory not found: {self.img_dir}")
+        if not self.mask_dir.exists():
             raise RuntimeError(f"Directory not found: {self.img_dir}")
             
         self.images = sorted([f for f in os.listdir(self.img_dir) if f.endswith('.jpg')])

@@ -1,95 +1,105 @@
 import torch
+from src.engine.device import get_device
 from torch.utils.data import DataLoader
-from src.data.dataset import BDDDataset
+from src.data.dataset import BDD_Dataset
 from src.data.transforms import get_train_transforms, get_val_transforms
 from src.engine.criterion import get_criterion, get_optimizer
 from src.models.model import get_model
-import torch.nn as nn
 from tqdm import tqdm
-# from torchmetrics.segmentation import MeanIoU
 from torchmetrics.classification import MulticlassJaccardIndex
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
 from datetime import datetime
+from src.utils.config import get_config, is_kaggle
+import os
 
 # config
 ROOT_DIR = "data/processed"
 BATCH_SIZE = 8
 EPOCHS = 10
-DEVICE = torch.device("mps" if torch.backends.mps.is_available() else "cpu")
 
-def train():
+# def train(train_img_dir, train_label_dir, val_img_dir, val_label_dir, checkpoint_dir, output_dir, batch_size=8, epochs=10):
+def train(cfg):
+    # use gpu
+    DEVICE = get_device()
+
     now = datetime.now()
     format = "%m-%d-%Y-%H%M"
     now_str = now.strftime(format)
 
+    # directory to store model checkpoints
+    output_dir = cfg["training"]["checkpoint_dir"]
+    os.makedirs(output_dir, exist_ok=True)
+
     start_epoch = 0
     best_val_loss = float("inf")
 
-    # store model checkpoints
-    os.makedirs("checkpoints", exist_ok=True)
-
     # mIoU metric to display during training
-    train_miou_metric = MulticlassJaccardIndex(num_classes=19, ignore_index=255).to(DEVICE)
-    val_miou_metric = MulticlassJaccardIndex(num_classes=19, ignore_index=255).to(DEVICE)
+    train_miou_metric = MulticlassJaccardIndex(num_classes=cfg["project"]["num_classes"], ignore_index=cfg["project"]["ignore_index"]).to(DEVICE)
+    val_miou_metric = MulticlassJaccardIndex(num_classes=cfg["project"]["num_classes"], ignore_index=cfg["project"]["ignore_index"]).to(DEVICE)
 
     # load data
-    train_ds = BDDDataset(ROOT_DIR, split="train", transform=get_train_transforms())
-    val_ds = BDDDataset(ROOT_DIR, split="val", transform=get_val_transforms())
+    train_ds = BDD_Dataset(cfg["data"]["train"]["img"], cfg["data"]["train"]["label"], transform=get_train_transforms(cfg))
+    val_ds = BDD_Dataset(cfg["data"]["val"]["img"], cfg["data"]["val"]["label"], transform=get_val_transforms(cfg))
 
-    train_loader = DataLoader(train_ds, batch_size=BATCH_SIZE, shuffle=True, num_workers=1)
-    val_loader = DataLoader(val_ds, batch_size=BATCH_SIZE, shuffle=False, num_workers=1)
+    train_loader = DataLoader(train_ds, batch_size=cfg["training"]["true_batch_size"], shuffle=True, num_workers=1)
+    val_loader = DataLoader(val_ds, batch_size=cfg["training"]["true_batch_size"], shuffle=False, num_workers=1)
 
     # setup model
-    model = get_model(num_classes=19).to(DEVICE)
+    model = get_model(num_classes=cfg["project"]["num_classes"]).to(DEVICE)
 
     # setup loss function and optimizer
     criterion = get_criterion()
 
     # load optimizer
-    current_lr = 1e-4
-    optimizer = get_optimizer(model, lr=current_lr, weight_decay=1e-5)
+    current_lr = cfg["training"]["lr"]
+    optimizer = get_optimizer(model, lr=current_lr, weight_decay=cfg["training"]["weight_decay"])
 
-    latest_train_run = f"checkpoints/{sorted(os.listdir("checkpoints"))[-1]}"
-    latest_checkpoint_path = os.path.join(latest_train_run, "best_model.pth")
+    # drop learning rate by 10x if validation loss doesn't improve for 3 epochs
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=cfg["training"]["scheduler_factor"], patience=cfg["training"]["scheduler_patience"]
+    )
+
+    # get most recent training run
+    latest_train_run = f"{output_dir}/{sorted(os.listdir(output_dir))[-1]}"
+    latest_checkpoint = os.path.join(latest_train_run, "best_model.pth")
     
-    # load checkpoint if it exists
-    if os.path.exists(latest_checkpoint_path):
-        print("Loading existing checkpoint...")
-        checkpoint = torch.load(latest_checkpoint_path, map_location=DEVICE)
+    # load the checkpoint if it exists
+    checkpoint_loaded = False
+    if os.path.exists(latest_checkpoint):
+        checkpoint_loaded = True
+        print(f"Loading existing checkpoint {latest_checkpoint}...")
+        checkpoint = torch.load(latest_checkpoint, map_location=DEVICE)
         model.load_state_dict(checkpoint['model_state_dict'])
 
         if "optimizer_state_dict" in checkpoint:
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
             current_lr = optimizer.param_groups[0]['lr']
+            print(f"Loaded optimizer state: learning rate={current_lr}")
 
+        # start at epoch where left off
         start_epoch = checkpoint.get("epoch", 0)
 
         # for saving checkpoints
+        print("Validating model checkpoint...")
         best_val_loss, _ = validate(model, val_loader, criterion, DEVICE, val_miou_metric)
-        print(f"Baseline val loss: {best_val_loss:.4f}")
+        print(f"Baseline val loss: {best_val_loss:.4f}")    
+    
+    # store results from this training run
+    new_checkpoint_dir = os.path.join(output_dir, f"train_run_{now_str}") # format: train_run_01-01-2026-0000
+    os.makedirs(new_checkpoint_dir, exist_ok=True)
 
-    # store results from this training run 
-    new_train_run_dir = f"checkpoints/train_run_{now_str}"
-    os.makedirs(new_train_run_dir, exist_ok=True)
-
-    # drop learning rate by 10x if validation loss doesn't improve for 3 epochs
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode='min', factor=0.1, patience=3
-    )
-
-    # storage for logs
-    log_path = os.path.join(new_train_run_dir, "training_log.csv")
-    print(log_path)
-    if os.path.exists(log_path):
+    # if checkpoint was loaded, load the training log and append to it
+    if checkpoint_loaded:
         print("Loading existing training logs...")
-        history = pd.read_csv(log_path).to_dict('records')
-    else:
+        old_log_path = os.path.join(latest_train_run, "training_log.csv")
+        history = pd.read_csv(old_log_path).to_dict('records')
+    else: # else start a new training log
         history = []
 
     # early stopping
-    early_stop_patience = 7
+    early_stop_patience = cfg["training"]["patience"] # use config
     early_stop_counter = 0
 
     for epoch in range(start_epoch, start_epoch + EPOCHS):
@@ -154,7 +164,7 @@ def train():
                 'best_val_loss': best_val_loss,
                 'epoch': epoch
             }
-            torch.save(checkpoint, "checkpoints/best_model.pth")
+            torch.save(checkpoint, os.path.join(new_train_run_dir, "best_model.pth"))
 
             print(f"--> New best model saved: (val loss: {best_val_loss:.4f} | val mIoU: {final_val_miou})")
         else:
@@ -173,23 +183,20 @@ def train():
         history.append(epoch_metrics)
 
         # save to csv
+        log_path = os.path.join(new_checkpoint_dir, "training_log.csv")
         df = pd.DataFrame(history)
-        df.to_csv("checkpoints/training_log.csv", index=False)
+        df.to_csv(log_path, index=False)
         
         # plot loss and mIoU
-        plot_history(df)
+        plot_history(df, new_checkpoint_dir)
 
         # check if should stop early
         if early_stop_counter >= early_stop_patience:
             print(f"Early stopping triggered at epoch {epoch+1}. Training halted.")
             break
 
-        # clear GPU cache
-        # if DEVICE.type == "mps":
-        #     torch.mps.empty_cache()
-
 # plot loss and mIoU
-def plot_history(df):
+def plot_history(df, checkpoint_dir):
     # update plot
     plt.figure(figsize=(12, 5))
 
@@ -208,8 +215,9 @@ def plot_history(df):
     plt.legend()
 
     plt.tight_layout()
-    plt.savefig("checkpoints/learning_curves.png")
-    plt.close() # Close to save memory
+    # plt.savefig("checkpoints/learning_curves.png")
+    plt.savefig(os.path.join(checkpoint_dir, "learning_curves.png"))
+    plt.close() # close to save memory
 
 def validate(model, loader, criterion, device, miou_metric, epoch=None):
     model.eval()
@@ -234,4 +242,5 @@ def validate(model, loader, criterion, device, miou_metric, epoch=None):
     return avg_loss, miou
 
 if __name__ == "__main__":
-    train()
+    cfg = get_config()
+    train(cfg)
