@@ -4,6 +4,7 @@
 /eval/
 /old/
 /checkpoints/
+/outputs/
 *.pth
 .DS_store
 __pycache__/
