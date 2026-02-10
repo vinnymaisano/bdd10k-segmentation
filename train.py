@@ -64,8 +64,7 @@ def train(cfg):
 
     # get most recent training run
     checkpoint_loaded = False
-    # existing_runs = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))])
-    existing_runs = []
+    existing_runs = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))])
 
     if len(existing_runs) > 0:
         latest_train_run = os.path.join(output_dir, existing_runs[-1])
