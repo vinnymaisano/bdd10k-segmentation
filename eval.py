@@ -44,7 +44,7 @@ def evaluate(checkpoint_dir, img_dir, mask_dir, output_dir, save_preds):
 
     # load data
     batch_size = 4
-    cfg = get_config
+    cfg = get_config()
     transform = get_val_transforms(cfg)
     
     val_ds = BDD_Dataset(img_dir, mask_dir, transform)

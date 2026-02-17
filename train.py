@@ -99,6 +99,12 @@ def train(cfg):
     new_checkpoint_dir = os.path.join(output_dir, f"train_run_{now_str}") # format: train_run_01-01-2026-0000
     os.makedirs(new_checkpoint_dir, exist_ok=True)
 
+    # save a copy of the config used for this training run
+    config_save_path = os.path.join(new_checkpoint_dir, "config.yaml")
+    with open(config_save_path, 'w') as f:
+        yaml.dump(cfg, f, default_flow_style=False)
+    print(f"Configuration saved to {config_save_path}")
+
     # if checkpoint was loaded, load the training log and append to it
     if checkpoint_loaded:
         print("Loading existing training logs...")
@@ -116,7 +122,7 @@ def train(cfg):
         # training
         model.train() # set model to training mode
         train_loss = 0
-   
+        
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]")
         
         iter = 0
@@ -212,13 +218,6 @@ def train(cfg):
         if early_stop_counter >= early_stop_patience:
             print(f"Early stopping triggered at epoch {epoch+1}. Training halted.")
             break
-
-    # save a copy of the config used for this training run
-    config_save_path = os.path.join(new_checkpoint_dir, "config.yaml")
-    with open(config_save_path, 'w') as f:
-        yaml.dump(cfg, f, default_flow_style=False)
-
-    print(f"Configuration saved to {config_save_path}")
 
 # plot loss and mIoU
 def plot_history(df, checkpoint_dir):
