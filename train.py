@@ -16,7 +16,6 @@ import os
 import yaml
 
 
-# def train(train_img_dir, train_label_dir, val_img_dir, val_label_dir, checkpoint_dir, output_dir, batch_size=8, epochs=10):
 def train(cfg):
     # use gpu
     DEVICE = get_device()
@@ -29,6 +28,12 @@ def train(cfg):
     # directory to store model checkpoints
     output_dir = cfg["training"]["checkpoint_dir"]
     os.makedirs(output_dir, exist_ok=True)
+    
+    # local: read/write checkpoints to/from same checkpoints folder
+    # kaggle: read checkpoint from dataset (read only), save checkpoint to kaggle/working (output)
+    input_dir = output_dir
+    if cfg["training"].get("checkpoint_input_dir", None):
+        input_dir = cfg["training"]["checkpoint_input_dir"]
 
     start_epoch = 0
     best_val_loss = float("inf")
@@ -64,10 +69,10 @@ def train(cfg):
 
     # get most recent training run
     checkpoint_loaded = False
-    existing_runs = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))])
+    existing_runs = sorted([d for d in os.listdir(input_dir) if os.path.isdir(os.path.join(input_dir, d))])
 
     if len(existing_runs) > 0:
-        latest_train_run = os.path.join(output_dir, existing_runs[-1])
+        latest_train_run = os.path.join(input_dir, existing_runs[-1])
         latest_checkpoint = os.path.join(latest_train_run, "best_model.pth")
     
         # load the checkpoint if it exists
@@ -122,7 +127,7 @@ def train(cfg):
         # training
         model.train() # set model to training mode
         train_loss = 0
-        
+
         train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]")
         
         iter = 0

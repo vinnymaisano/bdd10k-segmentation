@@ -12,7 +12,6 @@ data:
   roots:
     local: "data/processed"
     kaggle: "/kaggle/input/solesensei_bdd100k/bdd100k_seg/bdd100k/seg"
-  
   train:
     img: "images/train"
     label: "labels/train"
