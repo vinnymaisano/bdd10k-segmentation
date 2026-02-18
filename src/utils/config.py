@@ -32,7 +32,7 @@ def get_config():
     # create checkpoint directory on kaggle
     if env == "kaggle":
         cfg["training"]["checkpoint_dir"] = "/kaggle/working/checkpoints"
-        cfg["training"]["checkpoint_input_dir"] = "kaggle/input/datasets/vinnymaisano"
+        cfg["training"]["checkpoint_input_dir"] = "/kaggle/input/datasets/vinnymaisano"
 
     print(f"Using {env.upper()} environment. Data root: {root}")
     return cfg
