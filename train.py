@@ -128,7 +128,7 @@ def train(cfg):
         model.train() # set model to training mode
         train_loss = 0
 
-        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{epochs} [Train]")
+        train_pbar = tqdm(train_loader, desc=f"Epoch {epoch+1}/{start_epoch + epochs} [Train]")
         
         iter = 0
         for i, (images, masks, _) in enumerate(train_pbar):
