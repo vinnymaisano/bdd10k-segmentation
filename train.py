@@ -49,8 +49,8 @@ def train(cfg):
     train_ds = BDD_Dataset(cfg["data"]["train"]["img"], cfg["data"]["train"]["label"], transform=get_train_transforms(cfg))
     val_ds = BDD_Dataset(cfg["data"]["val"]["img"], cfg["data"]["val"]["label"], transform=get_val_transforms(cfg))
 
-    train_loader = DataLoader(train_ds, batch_size=true_batch_size, shuffle=True, num_workers=1)
-    val_loader = DataLoader(val_ds, batch_size=true_batch_size, shuffle=False, num_workers=1)
+    train_loader = DataLoader(train_ds, batch_size=true_batch_size, shuffle=True, num_workers=cfg["training"].get("num_workers", 1), persistent_workers=True)
+    val_loader = DataLoader(val_ds, batch_size=true_batch_size, shuffle=False, num_workers=cfg["training"].get("num_workers", 1), persistent_workers=True)
 
     # setup model
     model = get_model(num_classes=cfg["project"]["num_classes"]).to(DEVICE)

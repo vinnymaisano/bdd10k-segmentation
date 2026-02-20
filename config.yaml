@@ -32,6 +32,7 @@ training:
   checkpoint_dir: "checkpoints"
   scheduler_patience: 4
   scheduler_factor: 0.1
+  num_workers: 2
 
 # evaluation
 evaluation:
