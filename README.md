@@ -1,13 +1,9 @@
-<div align="center">
-
 # 🚗 Semantic Segmentation for Autonomous Driving
 
 **Pixel-level scene understanding on real-world dashcam footage from the BDD100K dataset**
 
 A U-Net with a ResNet-50 encoder, trained end to end to label every pixel of a driving scene
 as one of **19 classes**: road, sidewalk, car, pedestrian, traffic light, sky, and more.
-
-</div>
 
 ---
 
